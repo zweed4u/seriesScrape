@@ -19,6 +19,7 @@ class SeriesScrape:
 		}
 
 	def parse_episodes(self, base_episode_url: str, episode_title: str):
+		print(f'Parsing/building host urls dict for {episode_title}...')
 		table_soup = BeautifulSoup(requests.request('GET', base_episode_url, headers=self.headers).content, "html5lib")
 		url_js = table_soup.findAll('a',{'class':'btn btn-danger btn-sm'})
 		episode_links = []
@@ -28,6 +29,12 @@ class SeriesScrape:
 			else:
 				episode_links.append('http'+url["onclick"].split("http")[1].split("'")[0])
 		self.episode_links_dict[episode_title] = episode_links
+
+	def download_episode(self, e_url: str='', e_title: str=''):
+		if self.episode_links_dict == {}:
+			self.search()
+		print(f'{e_title} {e_url}')
+
 
 	def search(self, download: bool=True):
 		search_response = self.session.post('http://dwatchseries.to/show/search-shows-json', data={'term': self.title}, headers=self.headers)
@@ -49,6 +56,11 @@ class SeriesScrape:
 			episode_thread = threading.Thread(target=self.parse_episodes, args=(base_episode_url, episode_title,))
 			episode_thread.start()
 			episode_thread.join()
-		print(json.dumps(self.episode_links_dict, indent=4))
+
+		for e in self.episode_links_dict:
+			d_thread = threading.Thread(target=self.download_episode, args=(random.choice(self.episode_links_dict[e]), e,))
+			d_thread.start()
+			d_thread.join()
+
 
 SeriesScrape('show title here').search()
