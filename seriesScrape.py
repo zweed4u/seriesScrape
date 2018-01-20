@@ -1,22 +1,40 @@
 #!/usr/bin/python3
+import os
 import sys
 import json
 import time
+import shutil
 import urllib
 import random
 import requests
 import threading
 from bs4 import BeautifulSoup
+from selenium import webdriver
 
+
+# "Nice" hosts
+# speedvid ('video',{'class':'jw-video jw-reset'})['src']
+# vidlox ('content',{'class':'row'}) -> script var player src
+# daclips ('video',{'id':'flvvideo_html5_api'})['src']
+# vidoza ('video',{'class':'jw-video jw-reset'})['src']
+# youwatch ('video',{'class':'jw-video jw-reset'})['src']
+nice_hosts = ['speedvid', 'vidoza', 'youwatch']
 
 class SeriesScrape:
 	def __init__(self, title: str):
+		self.driver = None
 		self.title = title
 		self.session = requests.session()
 		self.episode_links_dict = {}
 		self.headers = {
 			'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36'
 		}
+
+	def start_driver(self):
+		profile = webdriver.ChromeOptions()
+		profile.add_experimental_option('prefs', {"download.default_directory": "NUL", "download.prompt_for_download": False, })
+		self.driver = webdriver.Chrome(f'{os.getcwd()}/chromedriver', chrome_options=profile) # chromedriver bin must be in folder of invocation
+		self.driver.set_page_load_timeout(10)
 
 	def parse_episodes(self, base_episode_url: str, episode_title: str):
 		print(f'Parsing/building host urls dict for {episode_title}...')
@@ -33,8 +51,21 @@ class SeriesScrape:
 	def download_episode(self, e_url: str='', e_title: str=''):
 		if self.episode_links_dict == {}:
 			self.search()
-		print(f'{e_title} {e_url}')
 
+		if self.driver is None:
+			self.start_driver()
+		try:
+			self.driver.get(e_url)
+		except:
+			self.driver.refresh()
+		soup = BeautifulSoup(self.driver.page_source, "html5lib")
+		if 'speedvid' in e_url or 'vidoza' in e_url or 'youwatch' in e_url:
+			host_url = soup.findAll('video',{'class':'jw-video jw-reset'})[0]['src']
+		print(f'{e_title} {host_url} from {e_url}')
+
+	def teardown(self):
+		self.driver.quit()
+		shutil.rmtree('NUL')
 
 	def search(self, download: bool=True):
 		search_response = self.session.post('http://dwatchseries.to/show/search-shows-json', data={'term': self.title}, headers=self.headers)
@@ -56,11 +87,15 @@ class SeriesScrape:
 			episode_thread = threading.Thread(target=self.parse_episodes, args=(base_episode_url, episode_title,))
 			episode_thread.start()
 			episode_thread.join()
-
+		print('')
 		for e in self.episode_links_dict:
-			d_thread = threading.Thread(target=self.download_episode, args=(random.choice(self.episode_links_dict[e]), e,))
+			rand_e_url = random.choice(self.episode_links_dict[e])
+			while rand_e_url.split('//')[1].split('.')[0] not in nice_hosts:
+				rand_e_url = random.choice(self.episode_links_dict[e])
+			d_thread = threading.Thread(target=self.download_episode, args=(rand_e_url, e,))
 			d_thread.start()
 			d_thread.join()
+		self.teardown()
 
-
+print(f'Usable hosts: {nice_hosts}\n')
 SeriesScrape('show title here').search()
