@@ -48,10 +48,22 @@ class SeriesScrape:
 				episode_links.append('http'+url["onclick"].split("http")[1].split("'")[0])
 		self.episode_links_dict[episode_title] = episode_links
 
-	def download_episode(self, e_url: str='', e_title: str=''):
+	def download_video(self, e_title, hosted_v_url):
+		# Implement progress bar in future - download media in chunks
+		# Implement threading here for concurrent episode downloads
+		print(f'Downloading {e_title}...')
+		local_filename = f"{e_title}.{hosted_v_url.split('/')[-1].split('.')[-1]}"
+		media_response = requests.get(hosted_v_url, stream=True)
+		downloaded_file_path = f'{self.title.title()}/{local_filename}'
+		with open(f'{downloaded_file_path}', 'wb') as file:
+			for chunk in media_response.iter_content(chunk_size=1024): 
+				if chunk:
+					file.write(chunk)
+		return local_filename
+
+	def extract_episode_url(self, e_url: str='', e_title: str=''):
 		if self.episode_links_dict == {}:
 			self.search()
-
 		if self.driver is None:
 			self.start_driver()
 		try:
@@ -61,13 +73,20 @@ class SeriesScrape:
 		soup = BeautifulSoup(self.driver.page_source, "html5lib")
 		if 'speedvid' in e_url or 'vidoza' in e_url or 'youwatch' in e_url:
 			host_url = soup.findAll('video',{'class':'jw-video jw-reset'})[0]['src']
-		print(f'{e_title} {host_url} from {e_url}')
+		download_thread = threading.Thread(target=self.download_video, args=(e_title, host_url,))
+		download_thread.start()
+
+	def make_dir(self):
+		if not os.path.exists(self.title.title()):
+			os.mkdir(self.title.title())
 
 	def teardown(self):
 		self.driver.quit()
-		shutil.rmtree('NUL')
+		if os.path.exists('NUL'):
+			shutil.rmtree('NUL')
 
 	def search(self, download: bool=True):
+		self.make_dir()
 		search_response = self.session.post('http://dwatchseries.to/show/search-shows-json', data={'term': self.title}, headers=self.headers)
 		if len(search_response.json())>2 or len(search_response.json())==1:
 			print('Multiple or No matches found! Exiting...')
@@ -92,7 +111,7 @@ class SeriesScrape:
 			rand_e_url = random.choice(self.episode_links_dict[e])
 			while rand_e_url.split('//')[1].split('.')[0] not in nice_hosts:
 				rand_e_url = random.choice(self.episode_links_dict[e])
-			d_thread = threading.Thread(target=self.download_episode, args=(rand_e_url, e,))
+			d_thread = threading.Thread(target=self.extract_episode_url, args=(rand_e_url, e,))
 			d_thread.start()
 			d_thread.join()
 		self.teardown()
