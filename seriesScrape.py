@@ -50,8 +50,8 @@ class SeriesScrape:
 
 	def download_video(self, e_title, hosted_v_url):
 		# Implement progress bar in future - download media in chunks
-		# Implement threading here for concurrent episode downloads
-		print(f'Downloading {e_title}...')
+		# Add file check to skip if file/episode exists locally
+		print(f'Downloading {e_title} from {hosted_v_url}...')
 		local_filename = f"{e_title}.{hosted_v_url.split('/')[-1].split('.')[-1]}"
 		media_response = requests.get(hosted_v_url, stream=True)
 		downloaded_file_path = f'{self.title.title()}/{local_filename}'
